@@ -1,5 +1,5 @@
 from itertools import islice
-from literal_value_generator import dump_to_sql_statement, dump_to_csv,\
+from .literal_value_generator import dump_to_sql_statement, dump_to_csv,\
     dump_to_oracle_insert_statements
 from migrate.changeset.constraint import ForeignKeyConstraint
 from datetime import datetime
@@ -15,8 +15,8 @@ from sqlalchemy.engine import reflection
 from sqlalchemy.exc import NoSuchTableError
 from sqlalchemy.types import Text, Numeric, BigInteger, Integer, DateTime, Date, TIMESTAMP, String, BINARY, LargeBinary
 from sqlalchemy.dialects.postgresql import BYTEA
-from schema_transformer import SchemaTransformer
-from etlalchemy_exceptions import DBApiNotFound
+from .schema_transformer import SchemaTransformer
+from .etlalchemy.etlalchemy_exceptions import DBApiNotFound
 import os
 
 # Parse the connn_string to find relevant info for each db engine #
@@ -26,6 +26,7 @@ An instance of 'ETLAlchemySource' represents 1 DB. This DB can be sent to
 multiple 'ETLAlchemyTargets' via calls to ETLAlchemySource.migrate().
 See examples (on github) for info...
 """
+
 
 class ETLAlchemySource():
 
@@ -40,7 +41,12 @@ class ETLAlchemySource():
                  skip_table_if_empty=False,
                  skip_column_if_empty=False,
                  compress_varchar=False,
-                 log_file=None):
+                 log_file=None,
+                 add_import_column=None):
+
+        self.import_datetime = datetime.now()
+
+        self.add_import_column = add_import_column
         # TODO: Store unique columns in here, and ADD the unique constraints
         # after data has been migrated, rather than before
         self.unique_columns = []
@@ -148,7 +154,6 @@ class ETLAlchemySource():
                 i *= 2
             return i - 2
 
-
     def standardize_column_type(self, column, raw_rows):
         old_column_class = column.type.__class__
         column_copy = Column(column.name,
@@ -166,9 +171,9 @@ class ETLAlchemySource():
         # Duck-typing to remove
         # database-vendor specific column types
         ##############################
-        base_classes = map(
+        base_classes = list(map(
             lambda c: c.__name__.upper(),
-            column.type.__class__.__bases__)
+            column.type.__class__.__bases__))
         self.logger.info("({0}) {1}".format(column.name,
             column.type.__class__.__name__))
         self.logger.info("Bases: {0}".format(str(base_classes)))
@@ -207,10 +212,12 @@ class ETLAlchemySource():
                     # Update varchar(size)
                     if len(data) > max_data_length:
                         max_data_length = len(data)
-                    if isinstance(row[idx], unicode):
-                        row[idx] = row[idx].encode('utf-8', 'ignore')
+                    if isinstance(row[idx], str):
+                        # ugly handle of \x00 = NULL encoding in strings
+                        row[idx] = row[idx].replace('\x00', '').encode('utf-8')
                     else:
-                        row[idx] = row[idx].decode('utf-8', 'ignore').encode('utf-8')
+                        row[idx] = row[idx].decode('utf-8', 'ignore').replace('\x00', '').encode(
+                            'utf-8')
             if self.compress_varchar:
                 # Let's reduce the "n" in VARCHAR(n) to a power of 2
                 if max_data_length > 0:
@@ -253,7 +260,7 @@ class ETLAlchemySource():
                             column.name, str(varchar_length)))
                 if data is not None:
                     null = False
-                    if isinstance(row[idx], unicode):
+                    if isinstance(row[idx], str):
                         row[idx] = row[idx].encode('utf-8', 'ignore')
                 #if row[idx]:
                 #    row[idx] = row[idx].decode('utf-8', 'ignore')
@@ -339,7 +346,10 @@ class ETLAlchemySource():
 
                 elif data.__class__.__name__ == 'int':
                     intCount += 1
+                # check max value for float or int. float might be converted to int if no mantissa exists
+                if data is not None:
                     maxDigit = max(data, maxDigit)
+
             self.logger.info(" --> " + str(column.name) +
                              "..." + str(type_count))
             #self.logger.info("Max Digit Length: {0}".format(str(len(str(maxDigit)))))
@@ -376,7 +386,7 @@ class ETLAlchemySource():
                     # Do conversion...
                     for r in raw_rows:
                         if r[idx] is not None:
-                            r[idx] = long(r[idx])
+                            r[idx] = int(r[idx])
                 else:
                     column_copy.type = Integer()
                     self.logger.warning("Coercing to 'Integer'")
@@ -402,13 +412,13 @@ class ETLAlchemySource():
                 for r in raw_rows:
                     if r[idx] is not None:
                         null = False
-                        r[idx] = r[idx].encode('hex')
+                        r[idx] = r[idx].hex()
             column_copy.type = LargeBinary()
         elif "_BINARY" in base_classes:
             for r in raw_rows:
                 if r[idx] is not None:
                     null = False
-                    r[idx] = r[idx].encode('hex')
+                    r[idx] = r[idx].hex()
             if self.dst_engine.dialect.name.lower() == "postgresql":
                 column_copy.type = BYTEA()
             else:
@@ -470,9 +480,9 @@ class ETLAlchemySource():
 
         cname = column_copy.name
         columnHasGloballyIgnoredSuffix = len(
-            filter(
+            list(filter(
                 lambda s: cname.find(s) > -1,
-                self.global_ignored_col_suffixes)) > 0
+                self.global_ignored_col_suffixes))) > 0
 
         oldColumns = self.current_ordered_table_columns
         oldColumnsLength = len(self.current_ordered_table_columns)
@@ -527,8 +537,8 @@ class ETLAlchemySource():
             del self.indexes[T.name]
             del self.fks[T.name]
             self.deleted_table_count += 1
-            self.deleted_columns += map(lambda c: T.name +
-                                       "." + c.name, T.columns)
+            self.deleted_columns += list(map(lambda c: T.name +
+                                                       "." + c.name, T.columns))
             self.deleted_column_count += len(T.columns)
             return None
         return True
@@ -592,7 +602,10 @@ class ETLAlchemySource():
                 return True
                 # We need to Upsert the data...
 
-    def send_data(self, table, columns):
+    def send_data(self,
+                  table,
+                  columns,
+                  schema_name=None):
         Session = sessionmaker(bind=self.dst_engine)
         session = Session()
         data_file_path = os.getcwd() + "/" + table + ".sql"
@@ -617,6 +630,7 @@ class ETLAlchemySource():
                 os.system("cat {4} | isql {0} {1} {2} -d{3} -v"
                           .format(dsn, username, password,
                                   db_name, data_file_path))
+                self.logger.info("Done.")
             else:
                 try:
                     conn = session.connection()
@@ -654,7 +668,7 @@ class ETLAlchemySource():
             host = self.dst_engine.url.host
             self.logger.info(
                 "Sending data to target MySQL instance...(Fast [mysqlimport])")
-            columns = map(lambda c: "\`{0}\`".format(c), columns)
+            columns = list(map(lambda c: "\`{0}\`".format(c), columns))
             cmd = ("mysqlimport -v -h{0} -u{1} -p{2} "
                        "--compress "
                        "--local "
@@ -707,8 +721,8 @@ class ETLAlchemySource():
                 delimiter = '|'
                 quote = "\'"
                 #escape = '/'
-                copy_from_stmt = "COPY \"{0}\" FROM STDIN WITH CSV NULL '{1}'"\
-                    .format(table, null_value, quote, delimiter)
+                copy_from_stmt = "COPY \"{0}\".\"{1}\" FROM STDIN WITH CSV NULL '{2}'" \
+                    .format(schema_name, table, null_value, quote, delimiter)
                 cur.copy_expert(copy_from_stmt, fp_psql)
                               #columns=tuple(map(lambda c: '"'+str(c)+'"', columns)))
             conn.commit()
@@ -769,11 +783,11 @@ class ETLAlchemySource():
                 if not self.enable_mssql_bulk_insert and\
                    self.dst_engine.dialect.name.lower() == "mssql":
                     dump_to_sql_statement(T.insert().values(
-                            map(lambda r:
+                        list(map(lambda r:
                                 dict(zip(self.current_ordered_table_columns,
                                          r)),
                                 raw_rows)
-                            ), fp, self.dst_engine, T.name)
+                             )), fp, self.dst_engine, T.name)
                 elif self.dst_engine.dialect.name.lower() == "oracle":
                     self.logger.warning(
                         "** BULK INSERT operation not supported by Oracle. " +
@@ -802,7 +816,7 @@ class ETLAlchemySource():
                     "We are unable to Upsert into this table without " +\
                     "identifying unique rows based on PKs!".format(T.name)
                 raise Exception(s)
-            unique_columns = filter(lambda c: c.name.lower() in pks, T.columns)
+            unique_columns = list(filter(lambda c: c.name.lower() in pks, T.columns))
             self.logger.info(
                 "Unique columns are '{0}'".format(
                     str(unique_columns)))
@@ -832,11 +846,11 @@ class ETLAlchemySource():
                     with open(data_file_path, "a+") as fp:
                         stmt = T.update()\
                                .where(and_(*tuple(
-                                   map(lambda pk:
+                            list(map(lambda pk:
                                        T.columns[pk] ==
                                        row[self.current_ordered_table_columns
                                            .index(pk)],
-                                       pks))))\
+                                     pks))))) \
                                .values(dict(zip(
                                    self.current_ordered_table_columns, row)))
                         dump_to_sql_statement(stmt, fp, self.dst_engine, T.name)
@@ -860,13 +874,15 @@ class ETLAlchemySource():
                         T.insert().values(raw_rows), fp,
                         self.dst_engine, T.name)
         conn.close()
+
     # TODO: Have a 'Create' option for each table...
 
     def migrate(
             self,
             destination_database_url,
             migrate_data=True,
-            migrate_schema=True):
+            migrate_schema=True,
+            set_psql_schema=None):
         """"""""""""""""""""""""
         """ ** REFLECTION ** """
         """"""""""""""""""""""""
@@ -891,7 +907,15 @@ class ETLAlchemySource():
             self.dst_engine = create_engine(destination_database_url)
         except ImportError as e:
             raise DBApiNotFound(destination_database_url)
-        dst_meta = MetaData()
+
+        # include postgres schema to be robust against duplicate constraint names over multuple
+        dst_meta = MetaData(schema=set_psql_schema, naming_convention={
+            "ix": "ix_%(column_0_label)s",
+            "uq": "uq_%(table_name)s_%(column_0_name)s",
+            "ck": "ck_%(table_name)s_%(constraint_name)s",
+            "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+            "pk": f"pk_{set_psql_schema}_%(table_name)s"
+        })
 
         Session = sessionmaker(bind=self.dst_engine)
         dst_meta.bind = self.dst_engine
@@ -937,7 +961,7 @@ class ETLAlchemySource():
                     "Table '" +
                     table +
                     "' not found in DB: '" +
-                    destination +
+                    destination_database_url +
                     "'.")
                 continue  # skip to next table...
             except sqlalchemy.exc.DBAPIError as e:
@@ -974,7 +998,7 @@ class ETLAlchemySource():
                 #########################################################
                 # Generate the mapping of 'column_name' -> 'list index'
                 ########################################################
-                cols = map(lambda c: c.name, T_src.columns)
+                cols = list(map(lambda c: c.name, T_src.columns))
                 self.current_ordered_table_columns = [None] * len(cols)
                 self.original_ordered_table_columns = [None] * len(cols)
                 for i in range(0, len(cols)):
@@ -987,7 +1011,6 @@ class ETLAlchemySource():
                     "Building query to fetch all rows from {0}".format(
                         T_src.name))
 
-
                 cnt = self.engine.execute(T_src.count()).fetchone()[0]
                 resultProxy = self.engine.execute(T_src.select())
                 self.logger.info("Done. ({0} total rows)".format(str(cnt)))
@@ -995,7 +1018,7 @@ class ETLAlchemySource():
                 self.logger.info("Loading all rows into memory...")
                 rows = []
 
-                for i in range(1, (cnt / buffer_size) + 1):
+                for i in range(1, int((cnt / buffer_size) + 1)):
                     self.logger.info(
                         "Fetched {0} rows".format(str(i * buffer_size)))
                     rows += resultProxy.fetchmany(buffer_size)
@@ -1036,6 +1059,9 @@ class ETLAlchemySource():
                     self.add_or_eliminate_column(
                         T, T_dst_exists, column, column_copy, raw_rows)
 
+                if self.add_import_column is not None:
+                    T.append_column(Column(self.add_import_column, DateTime))
+
                 if self.dst_engine.dialect.name.lower() == "mysql":
                     #######################################
                     # Remove auto-inc on composite PK's
@@ -1063,6 +1089,12 @@ class ETLAlchemySource():
                     tableCreationSuccess = self.create_table(T_dst_exists, T)
                     if not tableCreationSuccess:
                         continue
+
+                """"""""""""""""""""""""""""""
+                """" *** ADD STATIC COLUMN *** """""
+                """"""""""""""""""""""""""""""
+                for idx in range(0, len(raw_rows)):
+                    raw_rows[idx] = list(raw_rows[idx]) + [self.import_datetime]
 
                 """"""""""""""""""""""""""""""
                 """" *** INSERT ROWS *** """""
@@ -1094,7 +1126,7 @@ class ETLAlchemySource():
                     # Create buffers of "100000" rows
                     # TODO: Parameterize "100000" as 'buffer_size' (should be
                     # configurable)
-                    insertionCount = (len(raw_rows) / row_buffer_size) + 1
+                    insertionCount = int((len(raw_rows) / row_buffer_size) + 1)
                     raw_row_len = len(raw_rows)
                     self.total_rows += raw_row_len
                     if len(raw_rows) > 0:
@@ -1136,7 +1168,9 @@ class ETLAlchemySource():
                         t_start_load = datetime.now()
                         # From <table_name>.sql
                         self.send_data(
-                            T.name, self.current_ordered_table_columns)
+                            T.name,
+                            self.current_ordered_table_columns,
+                            schema_name=set_psql_schema)
 
                 t_stop_load = datetime.now()
 
@@ -1171,8 +1205,10 @@ class ETLAlchemySource():
                 self.times[table_name]['Load Time (Into Target)'] = load_dt_str
                 # End first table loop...
 
-    def add_indexes(self, destination_database_url):
-        dst_meta = MetaData()
+    def add_indexes(self,
+                    destination_database_url,
+                    set_psql_schema=None):
+        dst_meta = MetaData(schema=set_psql_schema)
         dst_meta.reflect(bind=self.dst_engine)
         dst_meta.bind = self.dst_engine
         Session = sessionmaker(bind=self.dst_engine)
@@ -1215,7 +1251,7 @@ class ETLAlchemySource():
                 unique = i['unique']
                 # Name the index something compatible across all databases
                 # (i.e. can't create Idx w/ same name as column in Postgresql)
-                name = "IDX_" + table_name + "__" + \
+                name = set_psql_schema + "_IDX_" + table_name + "__" + \
                     "_".join(col) + "__" + str(this_idx_count)
                 # Max length of identifier is 63 characters in
                 # postgresql & mysql
@@ -1326,11 +1362,13 @@ class ETLAlchemySource():
 
         self.index_count = idx_count
 
-    def add_fks(self, destination_database_url):
+    def add_fks(self,
+                destination_database_url,
+                set_psql_schema):
         ############################
         # Add FKs
         ############################
-        dst_meta = MetaData()
+        dst_meta = MetaData(schema=set_psql_schema)
 
         if self.dst_engine.dialect.name.lower() == "mssql":
             raise Exception(
@@ -1413,10 +1451,9 @@ class ETLAlchemySource():
                      cons_column_transformer[c].new_column not in ["", None]:
                         c = cons_column_transformer[c].new_column
                     constrained_columns.append(c)
-                constrained_cols = filter(lambda c: c is not None,
-                        map(lambda x: T.columns.get(x),
-                              constrained_columns))
-
+                constrained_cols = list(filter(lambda c: c is not None,
+                                               list(map(lambda x: T.columns.get(x),
+                                                        constrained_columns))))
 
                 ################################
                 # Check that the constrained columns
@@ -1455,11 +1492,8 @@ class ETLAlchemySource():
                 # Check that referenced table
                 # exists in destination DB schema
                 ############################
-                constraint_name = "FK__{0}__{1}".format(
+                constraint_name = set_psql_schema + "_FK__{0}__{1}".format(
                     table_name.upper(), T_ref.name.upper())
-
-                constraint_name = fk['name'] or f"FK__{table_name.upper()}__{T_ref.name.upper()}"
-
                 if len(constraint_name) > 63:
                     constraint_name = constraint_name[:63]
 
@@ -1487,8 +1521,8 @@ class ETLAlchemySource():
                      ref_column_transformer[c].newColumns not in ["", None]:
                         c = ref_column_transformer[c].newColumn
                     ref_columns.append(c)
-                referred_columns = map(
-                    lambda x: T_ref.columns.get(x), ref_columns)
+                referred_columns = list(map(
+                    lambda x: T_ref.columns.get(x), ref_columns))
                 self.logger.info("Ref Columns: " + str(ref_columns))
                 if len(referred_columns) < len(fk['referred_columns']):
                     self.logger.warning("Skipping FK constraint '" +
@@ -1715,7 +1749,7 @@ class ETLAlchemySource():
             "Load Time (Into Target)",
             "Indexing Time",
             "Constraint Time"]
-        for (table_name, timings) in self.times.iteritems():
+        for table_name, timings in self.times.items():
             self.logger.info(table_name)
             for key in ordered_timings:
                 self.logger.info("-- " + str(key) + ": " +
@@ -1741,5 +1775,5 @@ class ETLAlchemySource():
         ###########################################
         removedColumns = self.deleted_columns + self.null_columns
         with open("deleted_columns.csv", "w") as fp:
-            fp.write("\n".join(map(lambda c:
-                     c.replace(".", ","), removedColumns)))
+            fp.write("\n".join(list(map(lambda c:
+                                        c.replace(".", ","), removedColumns))))

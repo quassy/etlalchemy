@@ -1,15 +1,15 @@
 import decimal
 import datetime
-# Find the best implementation available on this platform
-try:
-    from cStringIO import StringIO
-except:
-    from StringIO import StringIO
+
+from io import StringIO
+
 
 def _generate_literal_value_for_csv(value, dialect):
     dialect_name = dialect.name.lower()
 
-    if isinstance(value, basestring):
+    if isinstance(value, (str, bytes)):
+        if isinstance(value, bytes):
+            value = value.decode("utf-8").replace('\x00', '')
         if dialect_name in ['sqlite', 'mssql']:
             # No support for 'quote' enclosed strings
             return "%s" % value
@@ -20,7 +20,7 @@ def _generate_literal_value_for_csv(value, dialect):
         return "NULL"
     elif isinstance(value, bool):
         return "%s" % int(value)
-    elif isinstance(value, (float, int, long)):
+    elif isinstance(value, (float, int)):
         return "%s" % value
     elif isinstance(value, decimal.Decimal):
         return str(value)
@@ -79,14 +79,17 @@ def _generate_literal_value_for_csv(value, dialect):
 
 def _generate_literal_value(value, dialect):
     dialect_name = dialect.name.lower()
-    if isinstance(value, basestring):
+
+    if isinstance(value, (str, bytes)):
+        if isinstance(value, bytes):
+            value = value.decode("utf-8").replace('\x00', '')
         value = value.replace("'", "''")
         return "'%s'" % value
     elif value is None:
         return "NULL"
     elif isinstance(value, bool):
         return "%s" % int(value)
-    elif isinstance(value, (float, int, long)):
+    elif isinstance(value, (float, int)):
         return "%s" % value
     elif isinstance(value, decimal.Decimal):
         return str(value)
@@ -150,13 +153,13 @@ def dump_to_oracle_insert_statements(fp, engine, table, raw_rows, columns):
         if i == num_rows-1:
             # Last row...
             lines.append("SELECT " +
-                         ",".join(map(lambda c: _generate_literal_value(
-                             c, dialect), raw_rows[i])) +
+                         ",".join(list(map(lambda c: _generate_literal_value(
+                             c, dialect), raw_rows[i]))) +
                          " FROM DUAL\n")
         else:
             lines.append("SELECT " +
-                         ",".join(map(lambda c: _generate_literal_value(
-                             c, dialect), raw_rows[i])) +
+                         ",".join(list(map(lambda c: _generate_literal_value(
+                             c, dialect), raw_rows[i]))) +
                          " FROM DUAL UNION ALL\n")
     fp.write(''.join(lines))
 

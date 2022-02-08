@@ -1,4 +1,4 @@
-from etlalchemy_exceptions import DBApiNotFound
+from .etlalchemy_exceptions import DBApiNotFound
 from sqlalchemy_utils import database_exists, create_database, drop_database
 from sqlalchemy import create_engine, MetaData
 import logging
@@ -31,11 +31,15 @@ class ETLAlchemyTarget():
         self.sources.append(source)
 
     def migrate(self, migrate_schema=True, migrate_data=True,
-                migrate_fks=True, migrate_indexes=True):
+                migrate_fks=True, migrate_indexes=True,
+                set_psql_schema=None,
+                target_db_user=None):
+
         try:
             self.dst_engine = create_engine(self.conn_string)
         except ImportError as e:
             raise DBApiNotFound(self.conn_string)
+
         if self.drop_database:
             self.logger.info(self.dst_engine.dialect.name)
             ############################
@@ -63,6 +67,21 @@ class ETLAlchemyTarget():
                 m.bind = self.dst_engine
                 m.reflect()
                 m.drop_all()
+            elif self.dst_engine.dialect.name.upper() == "POSTGRESQL":
+                if set_psql_schema is None:
+                    raise Exception("When choosing psql you have to set the target psql schema.")
+
+                if self.dst_engine.url: #and database_exists(self.dst_engine.url):
+
+                    self.dst_engine.execute(f"DROP SCHEMA IF EXISTS {set_psql_schema} CASCADE;")
+                    self.dst_engine.execute(f"CREATE SCHEMA IF NOT EXISTS {set_psql_schema};")
+                else:
+                    create_database(self.dst_engine.url)
+                    self.dst_engine.execute(f"CREATE SCHEMA IF NOT EXISTS {set_psql_schema};")
+
+                if target_db_user is None:
+                    raise Exception("With Postgres Target you have to supply the db user name.")
+                self.dst_engine.execute(f"ALTER USER {target_db_user} SET search_path to {set_psql_schema};")
             else:
                 if self.dst_engine.url and database_exists(self.dst_engine.url):
                     self.logger.warning(self.dst_engine.url)
@@ -81,10 +100,13 @@ class ETLAlchemyTarget():
             self.logger.info(
                     "Sending source '" + str(source) + "' to destination '" +
                     str(self.conn_string) + "'")
-            source.migrate(self.conn_string, migrate_schema=migrate_schema,
-                           migrate_data=migrate_data)
+            source.migrate(self.conn_string,
+                           migrate_schema=migrate_schema,
+                           migrate_data=migrate_data,
+                           set_psql_schema=set_psql_schema)
             if migrate_indexes:
-                source.add_indexes(self.conn_string)
+                source.add_indexes(self.conn_string,
+                                   set_psql_schema=set_psql_schema)
             if migrate_fks:
                 if self.dst_engine.dialect.name.lower() == "mssql":
                     self.logger.warning(
@@ -92,5 +114,6 @@ class ETLAlchemyTarget():
                             "BECAUSE 'sqlalchemy_migrate' DOES NOT " +
                             "SUPPORT fk.create() ON *MSSQL*")
                 else:
-                    source.add_fks(self.conn_string)
+                    source.add_fks(self.conn_string,
+                                   set_psql_schema=set_psql_schema)
             source.print_timings()
