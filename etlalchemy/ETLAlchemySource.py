@@ -1,30 +1,20 @@
-import codecs
 from itertools import islice
 from literal_value_generator import dump_to_sql_statement, dump_to_csv,\
     dump_to_oracle_insert_statements
-import random
 from migrate.changeset.constraint import ForeignKeyConstraint
 from datetime import datetime
 import time
-from copy import deepcopy
-import pickle
 import sqlalchemy
 import logging
-# from clean import cleaners
 from sqlalchemy.sql import select
 from sqlalchemy.schema import CreateTable, Column
 from sqlalchemy.sql.schema import Table, Index
-from sqlalchemy.ext.automap import automap_base
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy import create_engine, MetaData, func, and_
 from sqlalchemy.engine import reflection
-from sqlalchemy.inspection import inspect
 from sqlalchemy.exc import NoSuchTableError
 from sqlalchemy.types import Text, Numeric, BigInteger, Integer, DateTime, Date, TIMESTAMP, String, BINARY, LargeBinary
 from sqlalchemy.dialects.postgresql import BYTEA
-import inspect as ins
-import re
-import csv
 from schema_transformer import SchemaTransformer
 from etlalchemy_exceptions import DBApiNotFound
 import os

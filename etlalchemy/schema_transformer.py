@@ -1,5 +1,6 @@
 import logging
 import csv
+
 import sqlalchemy
 
 
@@ -78,7 +79,7 @@ class SchemaTransformer():
                 for row in dr:
                     st = self.TableTransformation(row)
                     self.table_transformations[st.old_table] = st
-    
+
     # Returns False if deleted...
     def transform_table(self, table):
         thisTableTT = self.table_transformations.get(table.name.lower())
@@ -193,5 +194,3 @@ class SchemaTransformer():
                         r[idx] = float(r[idx])
                     elif st.new_type == "Boolean":
                         r[idx] = bool_dict[r[idx]]
-                
-  
