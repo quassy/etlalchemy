@@ -1468,6 +1468,9 @@ class ETLAlchemySource():
                 ############################
                 constraint_name = "FK__{0}__{1}".format(
                     table_name.upper(), T_ref.name.upper())
+
+                constraint_name = fk['name'] or f"FK__{table_name.upper()}__{T_ref.name.upper()}"
+
                 if len(constraint_name) > 63:
                     constraint_name = constraint_name[:63]
 
