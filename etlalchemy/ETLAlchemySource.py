@@ -627,7 +627,6 @@ class ETLAlchemySource():
                 os.system("cat {4} | isql {0} {1} {2} -d{3} -v"
                           .format(dsn, username, password,
                                   db_name, data_file_path))
-                self.logger.info("Done.")
             else:
                 try:
                     conn = session.connection()
@@ -657,7 +656,7 @@ class ETLAlchemySource():
                         Original Exception:
                         {0}""".format(str(e)))
                     raise(e)
-                self.logger.info("Done.")
+            self.logger.info("Done.")
         elif self.dst_engine.dialect.name.lower() == "mysql":
             username = self.dst_engine.url.username
             password = self.dst_engine.url.password
@@ -1735,7 +1734,7 @@ class ETLAlchemySource():
 
         self.schema_transformer.failed_transformations = list(
             self.schema_transformer.failed_transformations)
-        if len(self.schema_transformer.failed_transformations) > 0:
+        if self.schema_transformer.failed_transformations:
             self.logger.critical(
                 "\n".join(self.schema_transformer.failed_transformations))
             self.logger.critical("""
