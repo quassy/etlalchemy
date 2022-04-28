@@ -1,0 +1,36 @@
+name: pre-commit
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 2
+    - uses: actions/setup-python@v2
+      with:
+        python-version: '3.10'
+    - run: export MYPYPATH=`pwd`:$MYPYPATH
+    - run: pip install poetry
+    - uses: pre-commit/action@v2.0.3
+      with:
+        extra_args: --from-ref HEAD~ --to-ref HEAD
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/setup-python@v2
+      with:
+        python-version: '3.10'
+    - name: pip install
+      env:
+        PYPI_INDEX_URL: ${{ secrets.PYPI_INDEX_URL }}
+      run: pip install -q -i $PYPI_INDEX_URL -r requirements.txt
+    - run: python3 -m doctest -v **/*.py
+    - run: python3 -m unittest -v

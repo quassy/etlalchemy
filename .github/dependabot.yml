@@ -1,0 +1,20 @@
+version: 2
+updates:
+- package-ecosystem: docker
+  directory: /
+  schedule:
+    interval: daily
+- package-ecosystem: pip
+  directory: /
+  schedule:
+    interval: daily
+  registries:
+  - python-azure
+# - package-ecosystem: npm
+#   directory: /
+#   schedule:
+#     interval: daily
+# - package-ecosystem: bundler
+#   directory: /
+#   schedule:
+#     interval: daily

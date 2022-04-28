@@ -1,7 +1,7 @@
 # etlalchemy
 
 Extract, Transform and Load...Migrate any SQL Database in 4 Lines of Code.
-*[Read more here...](http://thelaziestprogrammer.com/sharrington/databases/migrating-between-databases-with-etlalchemy)*
+*[Read more by the original author here...](http://thelaziestprogrammer.com/sharrington/databases/migrating-between-databases-with-etlalchemy)*
 
 ## Installation
 
@@ -19,10 +19,12 @@ pip install etlalchemy
 from etlalchemy import ETLAlchemySource, ETLAlchemyTarget
 
 source = ETLAlchemySource("mssql+pyodbc://username:password@DSN_NAME")
-target = ETLAlchemyTarget("mysql://username:password@hostname/db_name", drop_database=True)
+target = ETLAlchemyTarget(
+    "mysql://username:password@hostname/db_name", drop_database=True
+)
 target.addSource(source)
 target.migrate()
-````
+```
 
 ## Examples
 
@@ -42,7 +44,9 @@ source = ETLAlchemySource(
 #     excluded_tables=["salaries"],
 # )
 
-target = ETLAlchemyTarget("postgresql://etlalchemy:etlalchemy@localhost/test", drop_database=True)
+target = ETLAlchemyTarget(
+    "postgresql://etlalchemy:etlalchemy@localhost/test", drop_database=True
+)
 target.addSource(source)
 target.migrate()
 ```
@@ -54,11 +58,15 @@ from etlalchemy import ETLAlchemySource, ETLAlchemyTarget
 
 source = ETLAlchemySource("mysql://etlalchemy:etlalchemy@localhost/employees")
 
-target = ETLAlchemyTarget("postgresql://etlalchemy:etlalchemy@localhost/test", drop_database=True)
+target = ETLAlchemyTarget(
+    "postgresql://etlalchemy:etlalchemy@localhost/test", drop_database=True
+)
 target.addSource(source)
 # Note that each phase (schema, data, index, fk) is independent of all others,
 # and can be run standalone, or in any combination. (Obviously you need a schema to send data, etc...)
-target.migrate(migrate_fks=False, migrate_indexes=False, migrate_data=False, migrate_schema=True)
+target.migrate(
+    migrate_fks=False, migrate_indexes=False, migrate_data=False, migrate_schema=True
+)
 ```
 
 **Skip columns and tables if they are empty**
@@ -73,7 +81,9 @@ source = ETLAlchemySource(
     skip_column_if_empty=True,
     skip_table_if_empty=True,
 )
-target = ETLAlchemyTarget("postgresql://etlalchemy:etlalchemy@localhost/test", drop_database=True)
+target = ETLAlchemyTarget(
+    "postgresql://etlalchemy:etlalchemy@localhost/test", drop_database=True
+)
 target.addSource(source)
 target.migrate()
 ```
@@ -85,9 +95,11 @@ from etlalchemy import ETLAlchemySource, ETLAlchemyTarget
 
 source = ETLAlchemySource("mysql://etlalchemy:etlalchemy@localhost/employees")
 # This will leave the target DB as is, and if the tables being migrated from Source -> Target
-# already exist on the Target, then rows will be updated based on PKs if they exist, or 
+# already exist on the Target, then rows will be updated based on PKs if they exist, or
 # inserted if they DNE on the Target table.
-target = ETLAlchemyTarget("postgresql://etlalchemy:etlalchemy@localhost/test", drop_database=False)
+target = ETLAlchemyTarget(
+    "postgresql://etlalchemy:etlalchemy@localhost/test", drop_database=False
+)
 target.addSource(source)
 target.migrate()
 ```
@@ -102,13 +114,18 @@ from etlalchemy import ETLAlchemySource, ETLAlchemyTarget
 # See below for the simple structure of the .csv's for schema changes
 source = ETLAlchemySource(
     "mysql://etlalchemy:etlalchemy@localhost/employees",
-    column_schema_transformation_file=os.getcwd() + "/transformations/column_mappings.csv",
-    table_schema_transformation_file=os.getcwd() + "/transformations/table_mappings.csv",
+    column_schema_transformation_file=os.getcwd()
+    + "/transformations/column_mappings.csv",
+    table_schema_transformation_file=os.getcwd()
+    + "/transformations/table_mappings.csv",
 )
-target = ETLAlchemyTarget("postgresql://SeanH:Pats15Ball@localhost/test", drop_database=True)
+target = ETLAlchemyTarget(
+    "postgresql://SeanH:Pats15Ball@localhost/test", drop_database=True
+)
 target.addSource(source)
 target.migrate()
 ```
+
 | *column_mappings.csv* | *table_mappings.csv* |
 | :--- | :--- |
 |Column Name,Table Name,New Column Name,New Column Type,Delete|Table Name,New Table Name,Delete|
@@ -127,7 +144,9 @@ source = ETLAlchemySource(
     global_ignored_col_suffixes=["drop_all_columns_that_end_in_this"],
     global_renamed_col_suffixes={"date": "dt"},  # i.e. "created_date -> created_dt"
 )
-target = ETLAlchemyTarget("postgresql://SeanH:Pats15Ball@localhost/test", drop_database=True)
+target = ETLAlchemyTarget(
+    "postgresql://SeanH:Pats15Ball@localhost/test", drop_database=True
+)
 target.addSource(source)
 target.migrate()
 ```
@@ -196,5 +215,5 @@ For help installing cx_Oracle on a Mac (El Capitan + cx_Oracle = Misery),
 [check out this blog post](http://thelaziestprogrammer.com/sharrington/databases/oracle/install-cx_oracle-mac)
 for help.
 
-Run this tool from the **same server that hosts your Target database** to get **maximum
+Run this tool from the **same server that hosts your target database** to get **maximum
 performance** out of it.

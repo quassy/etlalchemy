@@ -1,0 +1,94 @@
+repos:
+- repo: https://github.com/sirosen/check-jsonschema
+  rev: 0.14.3
+  hooks:
+  - id: check-github-actions
+  - id: check-github-workflows
+- repo: local
+  hooks:
+  - id: poetry-lock
+    name: poetry-lock
+    entry: poetry
+    args: [lock]
+    language: python
+    pass_filenames: false
+    files: pyproject.toml
+  - id: poetry-requirements
+    name: poetry-requirements
+    entry: poetry export -o requirements.txt --without-hashes
+    language: python
+    pass_filenames: false
+    files: ^(pyproject.toml|poetry.lock)$
+  - id: pre-commit-autoupdate
+    name: pre-commit-autoupdate
+    entry: pre-commit autoupdate
+    language: system
+    pass_filenames: false
+    files: .pre-commit-config.yaml
+  - id: cleanup-cache
+    name: cleanup-cache
+    entry: find . -type f -name '*.py[co]' -delete -o -type d -name __pycache__ -delete
+    language: system
+    pass_filenames: false
+- repo: https://github.com/Lucas-C/pre-commit-hooks-safety
+  rev: v1.2.4
+  hooks:
+  - id: python-safety-dependencies-check
+    files: pyproject.toml
+- repo: https://github.com/PyCQA/isort
+  rev: 5.10.1
+  hooks:
+  - id: isort
+    args: [--force-single-line-imports]
+- repo: https://github.com/ambv/black
+  rev: 22.3.0
+  hooks:
+  - id: black
+    args: [--fast]
+- repo: https://github.com/asottile/blacken-docs
+  rev: v1.12.1
+  hooks:
+  - id: blacken-docs
+- repo: https://github.com/myint/docformatter
+  rev: v1.4
+  hooks:
+  - id: docformatter
+    args: [--in-place, --wrap-summaries=100, --wrap-descriptions=100]
+- repo: https://gitlab.com/pycqa/flake8
+  rev: 3.9.2
+  hooks:
+  - id: flake8
+    entry: pflake8
+    exclude: ^test/.*
+    additional_dependencies:
+    - pyproject-flake8
+    - flake8-annotations
+    - flake8-bandit
+    - flake8-bugbear
+    - flake8-builtins
+    - flake8-docstrings
+    - flake8-plugin-utils
+    - flake8-polyfill
+    - flake8-return
+# Manual hooks
+- repo: https://github.com/pre-commit/mirrors-mypy
+  rev: v0.950
+  hooks:
+  - id: mypy
+    stages: [manual]
+- repo: https://github.com/IamTheFij/docker-pre-commit
+  rev: v2.1.0
+  hooks:
+  - id: docker-compose-check
+    stages: [manual]
+# Custom hooks for non-python files
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v4.2.0
+  hooks:
+  - id: pretty-format-json
+    args: [--autofix, --indent=2, --no-ensure-ascii]
+- repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
+  rev: v2.3.0
+  hooks:
+  - id: pretty-format-yaml
+    args: [--autofix, --indent, '2', --preserve-quotes]

@@ -10,7 +10,6 @@
    quote-character.
 7. Add parameter for "_cleanup_table_csv_files_", with default value of True, allowing the user to
    override default and let files persist after they are loaded into Target DB.
-
 8. Check if two phase migrate should be
    included https://github.com/seanharr11/etlalchemy/pull/34/files
 9. Check if binary type should be
