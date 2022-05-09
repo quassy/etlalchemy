@@ -60,6 +60,7 @@ psycopg2-binary = { version = "^2.9.3", optional = true }
 mysqlclient = { version = "^2.1.0", optional = true }
 pyodbc = { version = "^4.0.32", optional = true }
 sqlalchemy-firebird = { version = "^0.7.5", optional = true }
+pymssql = { version = "^2.2.5", optional = true }
 
 [tool.poetry.dev-dependencies]
 
@@ -67,8 +68,9 @@ sqlalchemy-firebird = { version = "^0.7.5", optional = true }
 # You must have the drivers installed in order to install these!
 # (They are optional for a reason, install them them once drivers are installed)
 [tool.poetry.extras]
-oracle = ["cx-Oracle"]
-mysql = ["mysqlclient"]
-postgre = ["psycopg2-binary"]
-odbc = ["pyodbc"]
 firebird = ["sqlalchemy-firebird"]
+mssql = ["pymssql"]
+mysql = ["mysqlclient"]
+odbc = ["pyodbc"]
+oracle = ["cx-Oracle"]
+postgre = ["psycopg2-binary"]
