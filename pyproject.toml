@@ -49,6 +49,10 @@ version = "2.0.0"
 description = "extract, transform and load... migrate any SQL Database in 4 lines of code."
 authors = ["quassy", "Sean Harrington"]
 license = "MIT"
+packages = [
+    { include = "etlalchemy" },
+    { include = "etlalchemy/**/*.py" },
+]
 
 [tool.poetry.dependencies]
 python = "~3.10"
