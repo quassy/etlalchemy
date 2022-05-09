@@ -15,8 +15,8 @@ from sqlalchemy.engine import reflection
 from sqlalchemy.exc import NoSuchTableError
 from sqlalchemy.types import Text, Numeric, BigInteger, Integer, DateTime, Date, TIMESTAMP, String, BINARY, LargeBinary
 from sqlalchemy.dialects.postgresql import BYTEA
-from .schema_transformer import SchemaTransformer
-from .etlalchemy.etlalchemy_exceptions import DBApiNotFound
+from etlalchemy.schema_transformer import SchemaTransformer
+from etlalchemy.etlalchemy_exceptions import DBApiNotFound
 import os
 
 # Parse the connn_string to find relevant info for each db engine #
